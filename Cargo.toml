@@ -12,3 +12,6 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+serde = "1.0"
+git2 = "0.14"
+tabled = {version = "0.7.0", features = ["color"]}
