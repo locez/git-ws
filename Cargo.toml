@@ -3,6 +3,12 @@ name = "git-ws"
 version = "0.1.0"
 edition = "2021"
 
+authors = ["Locez <loki.a@live.cn>"]
+description = "git-ws is a git workspace manage tool"
+repository = "https://github.com/locez/git-ws"
+license = "MIT"
+readme = "README.md"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
