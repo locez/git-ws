@@ -1,65 +1,81 @@
-#![feature(type_alias_impl_trait)]
-#![feature(associated_type_defaults)]
-#![feature(generic_associated_types)]
-use std::vec;
+use clap::Parser;
+use git_ws::cli::Cli;
+use git_ws::workspace::Workspace;
+use git_ws::operations::{StatusOperation, AddOperation, CommitOperation};
+use git_ws::executor::BatchExecutor;
+use std::sync::Arc;
 
-use git2::{Repository, StatusOptions};
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error + Send>> {
+    let cli = Cli::parse();
 
-#[derive(Debug)]
-enum ChangeFiles {
-    NotStagedModified(String),
-    NotStagedRenamed(String, String),
-}
+    // Determine workspace root path
+    let workspace_path = if let Some(path) = cli.workspace {
+        path
+    } else {
+        std::env::current_dir().map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?
+    };
 
-//
-trait Status {
-    fn untracked_files(&self) -> Option<Vec<&str>>;
-    fn not_staged_modify_files(&self) -> Option<Vec<ChangeFiles>>;
-    fn staged_files(&self) -> Option<Vec<&str>>;
-}
+    // Initialize workspace
+    let mut workspace = Workspace::new(workspace_path);
+    workspace.discover_repositories().await?;
 
-impl Status for Repository {
-    fn untracked_files(&self) -> Option<Vec<&str>> {
-        None
-    }
+    // Create batch executor with a concurrency limit
+    let executor = BatchExecutor::new(4); // Limit to 4 concurrent operations
 
-    fn not_staged_modify_files(&self) -> Option<Vec<ChangeFiles>> {
-        let mut options = StatusOptions::new();
-        let statuses = match self.statuses(Some(&mut options)) {
-            Ok(statuses) => statuses,
-            Err(err) => panic!("Get status failed, {}", err),
-        };
-        let mut vec = vec![];
-        for status in statuses.iter() {
-            let old_path = status.index_to_workdir().unwrap().old_file().path();
-            let new_path = status.index_to_workdir().unwrap().new_file().path();
-            match (old_path, new_path) {
-                (Some(old), Some(new)) if old != new => vec.push(ChangeFiles::NotStagedRenamed(
-                    old.to_str().unwrap().into(),
-                    new.to_str().unwrap().into(),
-                )),
-                (old, new) => {
-                    vec.push(ChangeFiles::NotStagedModified(
-                        old.or(new).unwrap().to_str().unwrap().into(),
-                    ));
+    // Execute the requested command
+    match &cli.command {
+        git_ws::cli::Commands::Status => {
+            let operation = Arc::new(StatusOperation);
+            let repositories: Vec<_> = workspace.list_repositories().into_iter().cloned().collect();
+            let results = executor.execute_operation(operation, repositories).await.map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
+
+            for (repo_name, result) in results {
+                match result {
+                    Ok(output) => println!("{}", output),
+                    Err(e) => eprintln!("Error in {}: {}", repo_name, e),
                 }
             }
         }
-        Some(vec)
+        git_ws::cli::Commands::Add { paths } => {
+            let operation = Arc::new(AddOperation {
+                patterns: paths.clone(),
+            });
+            let repositories: Vec<_> = workspace.list_repositories().into_iter().cloned().collect();
+            let results = executor.execute_operation(operation, repositories).await.map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
+
+            for (repo_name, result) in results {
+                match result {
+                    Ok(output) => println!("{}", output),
+                    Err(e) => eprintln!("Error in {}: {}", repo_name, e),
+                }
+            }
+        }
+        git_ws::cli::Commands::Commit { message } => {
+            let operation = Arc::new(CommitOperation {
+                message: message.clone(),
+            });
+            let repositories: Vec<_> = workspace.list_repositories().into_iter().cloned().collect();
+            let results = executor.execute_operation(operation, repositories).await.map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
+
+            for (repo_name, result) in results {
+                match result {
+                    Ok(output) => println!("{}", output),
+                    Err(e) => eprintln!("Error in {}: {}", repo_name, e),
+                }
+            }
+        }
+        git_ws::cli::Commands::List => {
+            println!("Repositories in workspace:");
+            for repo in workspace.list_repositories() {
+                println!("  {}", repo.name);
+            }
+        }
+        git_ws::cli::Commands::Exec { command: _ } => {
+            // TODO: Implement custom command execution
+            println!("Custom command execution is not yet implemented");
+        }
     }
 
-    fn staged_files(&self) -> Option<Vec<&str>> {
-        None
-    }
-}
-
-fn main() {
-    let repo = match Repository::open("/home/locez/rust/git-ws/") {
-        Ok(repo) => repo,
-        Err(err) => panic!("open error, {}", err),
-    };
-    let mut options = StatusOptions::new();
-    options.include_untracked(true);
-    let r = repo.not_staged_modify_files();
-    println!("{:?}", r.unwrap())
+    Ok(())
 }
