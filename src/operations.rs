@@ -1,5 +1,6 @@
 use crate::error::GitOperationError;
 use crate::workspace::GitRepository;
+use colored::Colorize;
 use git2::StatusOptions;
 use std::sync::Arc;
 
@@ -64,6 +65,17 @@ impl GitOperation for StatusOperation {
         let mut modified_count = 0;
         let mut staged_count = 0;
 
+        if statuses.is_empty() {
+            file_statuses.push(FileStatus {
+                repository: repo.name.clone(),
+                summary: "Clean".to_string(),
+                status: "\x1b[32mClean\x1b[0m".to_string(), // Green
+                file: "".to_string(),
+            });
+            return Ok(serde_json::to_string(&file_statuses)
+                .map_err(|e| GitOperationError::OperationFailed(e.to_string()))?);
+        }
+
         for entry in statuses.iter() {
             if let Some(path) = entry.path() {
                 match entry.status() {
@@ -80,8 +92,8 @@ impl GitOperation for StatusOperation {
                         file_statuses.push(FileStatus {
                             repository: repo.name.clone(),
                             summary: "".to_string(),
-                            status: "\x1b[33mModified\x1b[0m".to_string(), // Yellow
-                            file: format!("\x1b[33m{}\x1b[0m", path),      // Yellow
+                            status: "Modified".yellow().to_string(), // Yellow
+                            file: path.yellow().to_string(),         // Yellow
                         });
                         modified_count += 1;
                     }
@@ -107,6 +119,7 @@ impl GitOperation for StatusOperation {
                 untracked_count, modified_count, staged_count
             );
         }
+        println!("{}", serde_json::to_string_pretty(&file_statuses).unwrap());
 
         Ok(serde_json::to_string(&file_statuses)
             .map_err(|e| GitOperationError::OperationFailed(e.to_string()))?)

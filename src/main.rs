@@ -6,7 +6,7 @@ use git_ws::workspace::Workspace;
 use serde_json;
 use std::sync::Arc;
 use tabled::Table;
-use tabled::settings::object::Segment;
+use tabled::settings::object::{Column, Columns, Object, Segment};
 use tabled::settings::{Alignment, Merge, Modify, Style};
 
 // Custom function to display status in the desired table format
@@ -15,52 +15,14 @@ fn display_status_table(repo_statuses: &[(String, Vec<FileStatus>)]) {
         return;
     }
 
-    // Calculate summary counts for each repository
-    let mut repo_summaries: Vec<(String, usize, usize)> = Vec::new(); // (repo_name, untracked_count, modified_count)
-
-    for (repo_name, statuses) in repo_statuses {
-        let mut untracked_count = 0;
-        let mut modified_count = 0;
-
-        for status in statuses {
-            if status.status.contains("Untracked") {
-                untracked_count += 1;
-            } else if status.status.contains("Modified") {
-                modified_count += 1;
-            }
-        }
-
-        repo_summaries.push((repo_name.clone(), untracked_count, modified_count));
-    }
-
     // Create a vector to hold all the table rows
     let mut table_rows: Vec<FileStatus> = Vec::new();
 
     // Process each repository
     for (idx, (repo_name, statuses)) in repo_statuses.iter().enumerate() {
-        let summary_info = repo_summaries
-            .iter()
-            .find(|(name, _, _)| name == repo_name)
-            .unwrap();
-        let untracked_count = summary_info.1;
-        let modified_count = summary_info.2;
-
         // Add each file status with appropriate repository and summary info
         for (file_idx, status) in statuses.iter().enumerate() {
             let mut row = status.clone();
-
-            // For the first file of each repository, show the repository name and summary
-            if file_idx == 0 {
-                row.repository = repo_name.clone();
-                row.summary = format!(
-                    "Untracked: {}\nModified: {}",
-                    untracked_count, modified_count
-                );
-            } else {
-                // For subsequent files, leave repository and summary empty
-                row.repository = String::new();
-                row.summary = String::new();
-            }
 
             table_rows.push(row.clone());
         }
@@ -81,7 +43,8 @@ fn display_status_table(repo_statuses: &[(String, Vec<FileStatus>)]) {
     table
         .with(Style::modern())
         .with(Merge::vertical())
-        .with(Modify::new(Segment::all()).with(Alignment::center()));
+        .with(Alignment::center_vertical())
+        .with(Alignment::center());
 
     println!("{}", table);
 }
